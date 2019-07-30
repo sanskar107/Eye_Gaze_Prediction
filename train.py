@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import math
-
+import cv2
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print(device)
@@ -23,16 +23,39 @@ net = AutoEncoder()
 net.to(device)
 net.train()
 
+img_mean = 108.9174
+img_stddev = 48.6903
+
+# img_mean = 0
+# img_stddev = 255
+
 params = net.state_dict()
 
 train_dataset = eyeloader('./data/', split="train")
 trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
 
-val_dataset = eyeloader('./data/', split="train")
-valloader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=1, pin_memory=True)
+val_dataset = eyeloader('./data/', split="val")
+valloader = torch.utils.data.DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
 
 
-optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=0.0001)
+def save_img(imgs, recon, epoch):
+	imgs = imgs.detach().numpy()
+	recon = recon.detach().numpy()
+	imgs = imgs*img_stddev + img_mean
+	recon = recon*img_stddev + img_mean
+	imgs = imgs.squeeze(1)
+	recon = recon.squeeze(1)
+	imgs = np.array(imgs, dtype = np.uint8)
+	recon = np.array(recon, dtype = np.uint8)
+	recon[recon < 0] = 0
+	recon[recon > 255] = 255
+	for i in range(imgs.shape[0]):
+		cv2.imwrite('output/' + str(i) + 'real.png', imgs[i])
+		cv2.imwrite('output/' + str(i) + 'recon.png', recon[i])
+
+
+# optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=0.001)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.00001)
 
 loss_fn = nn.MSELoss()
 
@@ -45,45 +68,58 @@ def update_lr(optimizer, epoch):
 		for param_group in optimizer.param_groups:
 			param_group['lr'] *= 0.1
 
-best_val_loss = 1e8
+resume_training = True
+if(resume_training):
+	net.load_state_dict(torch.load('best_val.wts'))
+	print("weights Loaded")
 
-No_Epoch = 50
+best_val_loss = 0.102
+
+No_Epoch = 500
 print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len(trainloader)))
 
-for EPOCHS in range(50):
-	# net.train()
-	update_lr(optimizer, EPOCHS)
+for EPOCHS in range(No_Epoch):
+	net.train()
+	# update_lr(optimizer, EPOCHS)
 	running_loss = 0
 	for i, data in enumerate(trainloader):
 		imgs, labels = data
 		imgs, labels = imgs.to(device), labels.to(device)
-		
-		out = net(imgs)
-		# loss = loss_fn(out, labels.float())
-		loss = loss_fn(out, imgs)
+		recon, gaze = net(imgs)
+		# print(recon)
+		loss_recon = loss_fn(recon, imgs)
+		loss_gaze = loss_fn(gaze, labels)
+		loss = loss_recon + loss_gaze
 		loss.backward()
 		optimizer.step()
 		optimizer.zero_grad()
-
 		running_loss += loss.item()
-		if i%100 == 99:
-			print("EPOCH %d: %d/1000 loss=%f"%(EPOCHS, 2*(i+1), running_loss/len(trainloader)))
-			running_loss = 0
-
+		# break
 	net.eval()
-	running_loss = 0
+	train_loss = running_loss/len(trainloader)
+	running_loss_recon = 0
+	running_loss_gaze = 0
 	with torch.no_grad():
 		for i, data in enumerate(valloader):
 			imgs, labels = data
 			imgs, labels = imgs.to(device), labels.to(device)
-			
-			out = net(imgs)
-			loss = loss_fn(out, imgs)
-			running_loss += loss.item()
+				
+			recon, gaze = net(imgs)
+			loss_recon = loss_fn(recon, imgs)
+			loss_gaze = loss_fn(gaze, labels)
+			loss = loss_recon + loss_gaze
 
-	print("EPOCH %d: VAL loss=%f"%(EPOCHS, running_loss/len(valloader)))
-	
-	if running_loss < best_val_loss:
+			if(i == 0):
+				save_img(imgs.cpu(), recon.cpu(), i)
+			running_loss_gaze += loss_gaze.item()
+			running_loss_recon += loss_recon.item()
+	running_loss_recon /= len(valloader)
+	running_loss_gaze /= len(valloader)
+
+	print("EPOCH : {} Loss_reconstruction : {:.3} Loss_Gaze : {:.3} Train_Loss : {:.3f}".format(EPOCHS, running_loss_recon, running_loss_gaze, train_loss))
+		
+	if running_loss_recon < best_val_loss:
 		torch.save(net.state_dict(), 'best_val.wts')
-		best_val_loss = running_loss
+		best_val_loss = running_loss_recon
+		print("Saved best loss weights")
 	torch.save(net.state_dict(), 'trained.wts')

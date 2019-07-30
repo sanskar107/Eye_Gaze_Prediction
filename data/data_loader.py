@@ -16,7 +16,10 @@ class eyeloader(data.Dataset):
 		self.split = split
 		self.img_size = [35, 55]
 		self.augmentations = augmentations
-
+		self.mean = 108.9174
+		self.stddev = 48.6903
+		# self.mean = 0
+		# self.stddev = 255
 		if split == "train":
 			self.files = glob(root + 'imgs_cropped/*.png')[0:800]
 		elif split == "val":
@@ -39,7 +42,7 @@ class eyeloader(data.Dataset):
 		lbl[1] = -lbl[1]
 		
 		img = img.astype(np.float64)
-
+		img = (img - self.mean)/self.stddev
 		img = torch.from_numpy(img).float().unsqueeze(0)
 		lbl = torch.from_numpy(lbl).float()
 
@@ -54,6 +57,7 @@ if __name__ == '__main__':
 	for i, data in enumerate(trainloader):
 		imgs, labels = data
 
-		print(imgs.shape, labels.shape)
+		print(imgs)
 		print(labels)
+		print(imgs.shape, labels.shape)
 		break
