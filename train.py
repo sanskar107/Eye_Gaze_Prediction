@@ -31,11 +31,11 @@ img_stddev = 48.6903
 
 params = net.state_dict()
 
-train_dataset = eyeloader('./data/', split="train")
-trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
+train_dataset = eyeloader('./data/all/', split="train")
+trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True, num_workers=1, pin_memory=True)
 
-val_dataset = eyeloader('./data/', split="val")
-valloader = torch.utils.data.DataLoader(train_dataset, batch_size=10, shuffle=True, num_workers=1, pin_memory=True)
+val_dataset = eyeloader('./data/all/', split="test")
+valloader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True, num_workers=1, pin_memory=True)
 
 
 def save_img(imgs, recon, epoch):
@@ -50,6 +50,8 @@ def save_img(imgs, recon, epoch):
 	recon[recon < 0] = 0
 	recon[recon > 255] = 255
 	for i in range(imgs.shape[0]):
+		if(i == 10):
+			break
 		cv2.imwrite('output/' + str(i) + 'real.png', imgs[i])
 		cv2.imwrite('output/' + str(i) + 'recon.png', recon[i])
 
@@ -61,25 +63,28 @@ loss_fn = nn.MSELoss()
 cos = nn.CosineSimilarity(dim = 1)
 
 def update_lr(optimizer, epoch):
-	if epoch == 25:
+	if epoch == 10:
 		for param_group in optimizer.param_groups:
 			param_group['lr'] *= 0.1
+		print("LR Reduced")
 
-	if epoch == 40:
+	if epoch == 20:
 		for param_group in optimizer.param_groups:
 			param_group['lr'] *= 0.1
+		print("LR Reduced")
 
 resume_training = True
 freeze_fc = False
+save_dir = 'weights/1/'
 if(resume_training):
-	net.load_state_dict(torch.load('best_val.wts'))
+	net.load_state_dict(torch.load(save_dir + 'best_val.wts'))
 	print("weights Loaded")
 
 if(freeze_fc):
 	for params in net.gaze.parameters():
 		params.requires_grad = False
 
-best_val_loss = 0.0367
+best_val_loss = 1
 
 No_Epoch = 1000
 print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len(trainloader)))
@@ -87,25 +92,26 @@ print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len(trainlo
 
 for EPOCHS in range(No_Epoch):
 	net.train()
-	# update_lr(optimizer, EPOCHS)
+	update_lr(optimizer, EPOCHS)
 	running_loss = 0
 	cosine_sim_train = 0
 	for i, data in enumerate(trainloader):
 		imgs, labels = data
 		imgs, labels = imgs.to(device), labels.to(device)
 		recon, gaze = net(imgs)
-		# cosine_sim_train += cos(gaze, labels).mean()
-		# cosine_sim_train += cos(gaze, labels)
-		# print(recon)
 
 		loss_recon = loss_fn(recon, imgs)
 		loss_gaze = loss_fn(gaze, labels)
 		loss = loss_recon + loss_gaze
-		cosine_sim_train += torch.acos(cos(gaze, labels)).mean()
+		if(i % 50 == 0):
+			print("iter : {} gaze : {:.3} recon : {:.3}".format(i, loss_gaze.item(), loss_recon.item()))
+
+		cosine_sim_train += torch.acos(cos(gaze, labels)).mean()*180.0/3.1415
 		loss.backward()
 		optimizer.step()
 		optimizer.zero_grad()
 		running_loss += loss.item()
+
 	net.eval()
 	train_loss = running_loss/len(trainloader)
 	cosine_sim_train /= len(trainloader)
@@ -120,7 +126,7 @@ for EPOCHS in range(No_Epoch):
 			recon, gaze = net(imgs)
 			loss_recon = loss_fn(recon, imgs)
 			loss_gaze = loss_fn(gaze, labels)
-			cosine_sim_test += torch.acos(cos(gaze, labels)).mean()
+			cosine_sim_test += torch.acos(cos(gaze, labels)).mean()*180.0/3.1415
 			loss = loss_recon + loss_gaze
 
 			if(i == 0):
@@ -132,9 +138,9 @@ for EPOCHS in range(No_Epoch):
 	cosine_sim_test /= len(valloader)
 
 	print("EPOCH : {} Loss_reconstruction : {:.3} Loss_Gaze : {:.3} Train_Loss : {:.3f} Cosine_Sim_Train : {:.3f} Cosine_Sim_Test : {:.3f}".format(EPOCHS, running_loss_recon, running_loss_gaze, train_loss, cosine_sim_train, cosine_sim_test))
-		
-	# if running_loss_recon < best_val_loss:
-	# 	torch.save(net.state_dict(), 'best_val.wts')
-	# 	best_val_loss = running_loss_recon
-	# 	print("Saved best loss weights")
-	# torch.save(net.state_dict(), 'trained.wts')
+	
+	if running_loss_recon < best_val_loss:
+		torch.save(net.state_dict(), save_dir + 'best_val.wts')
+		best_val_loss = running_loss_recon
+		print("Saved best loss weights")
+	torch.save(net.state_dict(), save_dir + 'trained.wts')

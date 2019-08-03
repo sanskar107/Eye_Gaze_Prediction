@@ -20,7 +20,7 @@ class eyeloader(data.Dataset):
 		self.mean = 108.9174
 		self.stddev = 48.6903
 
-		self.files = open(self.split + '.txt', 'r').read().split('\n')
+		self.files = open(self.root + self.split + '.txt', 'r').read().split('\n')[:-1]
 
 		# if split == "train":
 		# 	# self.files = [root + 'imgs_cropped/' + str(i) + '_cropped.png' for i in range(1, 800)]
