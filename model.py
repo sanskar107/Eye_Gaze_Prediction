@@ -80,15 +80,25 @@ class AutoEncoder(nn.Module):
 
 class RMSELoss(nn.Module):
 	def __init__(self):
-		super().__init__()
+		super(RMSELoss).__init__()
 		self.mse = nn.MSELoss()
 		
 	def forward(self,yhat,y):
 		return self.mse(yhat,y)/10000
 
+class CosineLoss(nn.Module):
+	def __init__(self):
+		super(CosineLoss).__init__()
+		cos = nn.CosineSimilarity(dim = 1)
+		
+	def forward(self,yhat,y):
+		return torch.acos(cos(yhat, y))
+
 
 if __name__ == '__main__':
 	ae = AutoEncoder()
 	a = torch.randn(1, 1, 35, 55)
-	print(ae(a)[0].shape)
-	print(ae(a)[1])
+	for params in ae.gaze.parameters():
+		params.requires_grad = False
+	for params in ae.parameters():
+		print(params)

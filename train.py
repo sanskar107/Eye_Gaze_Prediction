@@ -55,9 +55,10 @@ def save_img(imgs, recon, epoch):
 
 
 # optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=0.001)
-optimizer = torch.optim.Adam(net.parameters(), lr=0.00001)
+optimizer = torch.optim.Adam(net.parameters(), lr=0.0001)
 
 loss_fn = nn.MSELoss()
+cos = nn.CosineSimilarity(dim = 1)
 
 def update_lr(optimizer, epoch):
 	if epoch == 25:
@@ -69,44 +70,57 @@ def update_lr(optimizer, epoch):
 			param_group['lr'] *= 0.1
 
 resume_training = True
+freeze_fc = False
 if(resume_training):
 	net.load_state_dict(torch.load('best_val.wts'))
 	print("weights Loaded")
 
-best_val_loss = 0.102
+if(freeze_fc):
+	for params in net.gaze.parameters():
+		params.requires_grad = False
 
-No_Epoch = 500
+best_val_loss = 0.0367
+
+No_Epoch = 1000
 print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len(trainloader)))
+
 
 for EPOCHS in range(No_Epoch):
 	net.train()
 	# update_lr(optimizer, EPOCHS)
 	running_loss = 0
+	cosine_sim_train = 0
 	for i, data in enumerate(trainloader):
 		imgs, labels = data
 		imgs, labels = imgs.to(device), labels.to(device)
 		recon, gaze = net(imgs)
+		# cosine_sim_train += cos(gaze, labels).mean()
+		# cosine_sim_train += cos(gaze, labels)
 		# print(recon)
+
 		loss_recon = loss_fn(recon, imgs)
 		loss_gaze = loss_fn(gaze, labels)
 		loss = loss_recon + loss_gaze
+		cosine_sim_train += torch.acos(cos(gaze, labels)).mean()
 		loss.backward()
 		optimizer.step()
 		optimizer.zero_grad()
 		running_loss += loss.item()
-		# break
 	net.eval()
 	train_loss = running_loss/len(trainloader)
+	cosine_sim_train /= len(trainloader)
 	running_loss_recon = 0
 	running_loss_gaze = 0
+	cosine_sim_test = 0
 	with torch.no_grad():
 		for i, data in enumerate(valloader):
 			imgs, labels = data
 			imgs, labels = imgs.to(device), labels.to(device)
-				
+
 			recon, gaze = net(imgs)
 			loss_recon = loss_fn(recon, imgs)
 			loss_gaze = loss_fn(gaze, labels)
+			cosine_sim_test += torch.acos(cos(gaze, labels)).mean()
 			loss = loss_recon + loss_gaze
 
 			if(i == 0):
@@ -115,11 +129,12 @@ for EPOCHS in range(No_Epoch):
 			running_loss_recon += loss_recon.item()
 	running_loss_recon /= len(valloader)
 	running_loss_gaze /= len(valloader)
+	cosine_sim_test /= len(valloader)
 
-	print("EPOCH : {} Loss_reconstruction : {:.3} Loss_Gaze : {:.3} Train_Loss : {:.3f}".format(EPOCHS, running_loss_recon, running_loss_gaze, train_loss))
+	print("EPOCH : {} Loss_reconstruction : {:.3} Loss_Gaze : {:.3} Train_Loss : {:.3f} Cosine_Sim_Train : {:.3f} Cosine_Sim_Test : {:.3f}".format(EPOCHS, running_loss_recon, running_loss_gaze, train_loss, cosine_sim_train, cosine_sim_test))
 		
-	if running_loss_recon < best_val_loss:
-		torch.save(net.state_dict(), 'best_val.wts')
-		best_val_loss = running_loss_recon
-		print("Saved best loss weights")
-	torch.save(net.state_dict(), 'trained.wts')
+	# if running_loss_recon < best_val_loss:
+	# 	torch.save(net.state_dict(), 'best_val.wts')
+	# 	best_val_loss = running_loss_recon
+	# 	print("Saved best loss weights")
+	# torch.save(net.state_dict(), 'trained.wts')
