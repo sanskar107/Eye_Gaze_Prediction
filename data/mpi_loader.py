@@ -22,8 +22,8 @@ class mpiloader(data.Dataset):
 		self.mean = 108.9174
 		self.stddev = 48.6903
 
-		prefix = 'MPIIGaze/Evaluation Subset/sample list for eye image/'
-		prefix1 = 'MPIIGaze/Data/Normalized/'
+		prefix = self.root + 'MPIIGaze/Evaluation Subset/sample list for eye image/'
+		prefix1 = self.root + 'MPIIGaze/Data/Normalized/'
 		files = os.listdir(prefix)
 		path = []
 		for f in files:

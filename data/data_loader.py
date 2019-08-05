@@ -41,6 +41,7 @@ class eyeloader(data.Dataset):
 		img = io.imread(img_path)
 		img = np.array(img, dtype=np.uint8)
 
+		img = (img - img.min())*(255.0/(img.max() - img.min()))
 		lbl = list(map(float, json.loads(open(lbl_path).read())["eye_details"]["look_vec"][1:-1].split(',')))
 		lbl = np.array(lbl[:3]).astype(np.float32)
 		lbl[1] = -lbl[1]
@@ -67,7 +68,7 @@ if __name__ == '__main__':
 	for i, data in enumerate(trainloader):
 		imgs, labels = data
 
-		# print(imgs)
+		print(imgs)
 		# print(labels)
 		print(imgs.shape, labels.shape)
 		break
