@@ -75,7 +75,22 @@ class AutoEncoder(nn.Module):
 		latent = self.encoder(x)
 		eye_gaze = self.gaze(latent.view(-1, 1024))
 		recons = self.decoder(latent)
-		return recons, eye_gaze
+		return recons, eye_gaze, latent.view(-1, 1024)
+
+
+class Descriminator(nn.Module):
+	def __init__(self):
+		super(Descriminator, self).__init__()
+		self.disc = nn.Sequential(
+			nn.Linear(1024, 256),
+			nn.LeakyReLU(0.1, inplace=True),
+			nn.Linear(256, 64),
+			nn.LeakyReLU(0.1, inplace=True),
+			nn.Linear(64, 1),
+			nn.Sigmoid(),
+			)
+	def forward(self, x):
+		return self.disc(x)
 
 
 class RMSELoss(nn.Module):
@@ -96,9 +111,12 @@ class CosineLoss(nn.Module):
 
 
 if __name__ == '__main__':
-	ae = AutoEncoder()
-	a = torch.randn(1, 1, 35, 55)
-	for params in ae.gaze.parameters():
-		params.requires_grad = False
-	for params in ae.parameters():
-		print(params)
+	# ae = AutoEncoder()
+	# a = torch.randn(1, 1, 35, 55)
+	# for params in ae.gaze.parameters():
+	# 	params.requires_grad = False
+	# for params in ae.parameters():
+	# 	print(params)
+	dis = Descriminator()
+	a = torch.randn(1, 1024)
+	print(dis(a))

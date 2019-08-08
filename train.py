@@ -31,10 +31,10 @@ img_stddev = 48.6903
 
 params = net.state_dict()
 
-train_dataset = eyeloader('./data/all/', split="train")
+train_dataset = unityloader('./data/all/', split="train")
 trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True, num_workers=1, pin_memory=True)
 
-val_dataset = eyeloader('./data/all/', split="test")
+val_dataset = unityloader('./data/all/', split="test")
 valloader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True, num_workers=1, pin_memory=True)
 
 

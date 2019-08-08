@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torchvision import datasets, models, transforms
-from data.mpi_loader import *
+from data.data_loader import *
 from model import *
 import torchvision
 import torch.nn.functional as F
@@ -72,11 +72,11 @@ def update_lr(optimizer, epoch):
 
 resume_training = True
 freeze_fc = True
-save_dir = 'weights/1/'
+save_dir = 'weights/mpi/'
 configure(save_dir)
 
 if(resume_training):
-	net.load_state_dict(torch.load(save_dir + 'best_val.wts'))
+	net.load_state_dict(torch.load('weights/unity/best_val.wts'))
 	print("weights Loaded")
 
 if(freeze_fc):
