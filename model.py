@@ -8,58 +8,58 @@ class AutoEncoder(nn.Module):
 		super(AutoEncoder, self).__init__()
 		self.encoder = nn.Sequential(
 			nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.Conv2d(64, 64, kernel_size=3, stride=(1, 2), padding=1, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.MaxPool2d(kernel_size=2, stride=2),
 			
 			nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=(0, 1), bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.MaxPool2d(kernel_size=2, stride=2),
 			nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			# nn.MaxPool2d(kernel_size=2, stride=2),
 
 			nn.Conv2d(512, 1024, kernel_size=7, stride=1, padding=0, bias=True),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 		   )
 			# deconv
 		self.decoder = nn.Sequential(
 
 			nn.ConvTranspose2d(1024, 512, (3, 5)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.ConvTranspose2d(512, 256, (3, 5)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.ConvTranspose2d(256, 128, (3, 5)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.ConvTranspose2d(128, 64, (3, 5)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.ConvTranspose2d(64, 32, (5, 9)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.ConvTranspose2d(32, 16, (5, 9)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.ConvTranspose2d(16, 8, (7, 9)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.ConvTranspose2d(8, 4, (7, 9)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 			nn.ConvTranspose2d(4, 2, (7, 7)),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 
 			nn.ConvTranspose2d(2, 1, 1),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.LeakyReLU(0.2, inplace=True),
 		)
 
 		self.gaze = nn.Sequential(
@@ -78,9 +78,9 @@ class AutoEncoder(nn.Module):
 		return recons, eye_gaze, latent.view(-1, 1024)
 
 
-class Descriminator(nn.Module):
+class Discriminator(nn.Module):
 	def __init__(self):
-		super(Descriminator, self).__init__()
+		super(Discriminator, self).__init__()
 		self.disc = nn.Sequential(
 			nn.Linear(1024, 256),
 			nn.LeakyReLU(0.1, inplace=True),
@@ -88,6 +88,19 @@ class Descriminator(nn.Module):
 			nn.LeakyReLU(0.1, inplace=True),
 			nn.Linear(64, 1),
 			nn.Sigmoid(),
+			)
+	def forward(self, x):
+		return self.disc(x)
+
+class Discriminator_wgan(nn.Module):
+	def __init__(self):
+		super(Discriminator_wgan, self).__init__()
+		self.disc = nn.Sequential(
+			nn.Linear(1024, 256),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Linear(256, 64),
+			nn.LeakyReLU(0.2, inplace=True),
+			nn.Linear(64, 1),
 			)
 	def forward(self, x):
 		return self.disc(x)
@@ -117,6 +130,6 @@ if __name__ == '__main__':
 	# 	params.requires_grad = False
 	# for params in ae.parameters():
 	# 	print(params)
-	dis = Descriminator()
+	dis = Discriminator()
 	a = torch.randn(1, 1024)
 	print(dis(a))
