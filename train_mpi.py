@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 from torchvision import datasets, models, transforms
 from data.data_loader import *
-from model_new import *
+from model import *
 import torchvision
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -31,29 +31,27 @@ img_stddev = 48.6903
 
 params = net.state_dict()
 
-train_dataset = unityloader('./data/all/', split="train")
-trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=500, shuffle=True, num_workers=3, pin_memory=True)
+train_dataset = mpiloader('./data/', split="train")
+trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=1000, shuffle=True, num_workers=3, pin_memory=True)
 
-val_dataset = unityloader('./data/all/', split="test")
-valloader = torch.utils.data.DataLoader(val_dataset, batch_size=500, shuffle=True, num_workers=3, pin_memory=True)
+val_dataset = mpiloader('./data/', split="test")
+valloader = torch.utils.data.DataLoader(val_dataset, batch_size=1000, shuffle=True, num_workers=3, pin_memory=True)
 
 
 def save_img(imgs, recon, epoch):
 	imgs = imgs.cpu().detach().numpy()
 	recon = recon.cpu().detach().numpy()
-
 	# imgs = imgs*img_stddev + img_mean
 	# recon = recon*img_stddev + img_mean
-
 	imgs = (imgs + 1.0)*255.0/2.0
 	recon = (recon + 1.0)*255.0/2.0
 
 	imgs = imgs.squeeze(1)
 	recon = recon.squeeze(1)
-	recon[recon < 0] = 0
-	recon[recon > 255] = 255
 	imgs = np.array(imgs, dtype = np.uint8)
 	recon = np.array(recon, dtype = np.uint8)
+	recon[recon < 0] = 0
+	recon[recon > 255] = 255
 	for i in range(imgs.shape[0]):
 		if(i == 10):
 			break
@@ -68,17 +66,23 @@ loss_fn = nn.MSELoss()
 cos = nn.CosineSimilarity(dim = 1)
 
 def update_lr(optimizer, epoch):
-	if (epoch + 1) % 3 == 0:
-		lr = 0
+	if epoch == 19:
 		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.85
-			lr = param_group['lr']
-		print("LR Reduced to {}".format(lr))
+			param_group['lr'] *= 0.1
+		print("LR Reduced")
 
+	if epoch == 29:
+		for param_group in optimizer.param_groups:
+			param_group['lr'] *= 0.1
+		print("LR Reduced")
 
 resume_training = False
-freeze_fc = False
-save_dir = 'weights/unity/'
+freeze_fc = True
+save_dir = 'weights_old/mpi/'
+
+net.load_state_dict(torch.load("weights_old/unity/best_val.wts"))
+print("Unity weights loaded")
+
 if(resume_training):
 	net.load_state_dict(torch.load(save_dir + 'best_val.wts'))
 	print("weights Loaded")
@@ -105,24 +109,22 @@ for EPOCHS in range(No_Epoch):
 
 		if(i == 0):
 			save_img(imgs, recon, EPOCHS)
-
 		loss_recon = loss_fn(recon, imgs)
 		loss_gaze = loss_fn(gaze, labels)
 		angle_error = torch.acos(cos(gaze, labels)).mean()*180.0/3.1415
-		loss = loss_recon + loss_gaze
+		loss = loss_recon
 		# loss = loss_recon + angle_error*0.1
 		# if(i % 50 == 0):
 		# 	save_img(imgs.cpu(), recon.cpu(), i)
 
-		if(i % 10 == 0):
-			print("Epoch : {} iter : {} gaze : {:.3} recon : {:.3} angle_error : {:.3}".format(EPOCHS, i, loss_gaze.item(), loss_recon.item(), angle_error.item()))
+		# if(i % 50 == 0):
+		print("Epoch : {} iter : {} gaze : {:.3} recon : {:.3} angle_error : {:.3}".format(EPOCHS, i, loss_gaze.item(), loss_recon.item(), angle_error.item()))
 
 		cosine_sim_train += angle_error
 		optimizer.zero_grad()
 		loss.backward()
 		optimizer.step()
 		running_loss += loss.item()
-	
 	net.eval()
 	train_loss = running_loss/len(trainloader)
 	cosine_sim_train /= len(trainloader)

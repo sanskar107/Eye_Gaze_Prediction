@@ -92,7 +92,7 @@ print("Unity and MPI Weights Loaded")
 for params in ae.gaze.parameters():
 	params.requires_grad = False
 
-resume_training = True
+resume_training = False
 save_dir = 'weights/wgan_gp/'
 
 # configure(save_dir)
@@ -103,7 +103,7 @@ if(resume_training):
 	print("weights Loaded")
 
 
-best_val_loss = 8.85
+best_val_loss = 9
 
 No_Epoch = 1000
 
@@ -113,10 +113,10 @@ print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len_loader)
 
 
 # optim_recn = torch.optim.Adam(filter(lambda p: p.requires_grad, ae.parameters()), lr=0.0001)
-optim_gen = torch.optim.Adam(filter(lambda p: p.requires_grad, ae.parameters()), lr=0.0001)
-optim_dis = torch.optim.Adam(filter(lambda p: p.requires_grad, disc.parameters()), lr=0.0001)
+optim_gen = torch.optim.Adam(filter(lambda p: p.requires_grad, ae.parameters()), lr=0.00001)
+optim_dis = torch.optim.Adam(filter(lambda p: p.requires_grad, disc.parameters()), lr=0.00001)
 
-criterion_recn = nn.MSELoss(reduction = "sum") ####################CHange to RMSE
+criterion_recn = nn.MSELoss() ####################CHange to RMSE
 criterion_adverserial = nn.BCELoss()
 
 for EPOCHS in range(No_Epoch):
@@ -139,45 +139,44 @@ for EPOCHS in range(No_Epoch):
 		recon_u, gaze_u, latent_u = ae_unity(imgs_u)
 		recon_m, gaze_m, latent_m = ae(imgs_m)
 
-		_, test_u, _ = ae_unity(imgs_u)
-		print(torch.acos(cos(test_u, labels_u)).mean()*180.0/3.1415)
-
 		#Train Discriminator
 		optim_dis.zero_grad()
 
-		# epsilon = torch.rand(batch_size,1)
-		# epsilon = epsilon.expand_as(latent_u)
-		# epsilon = epsilon.cuda()
+		epsilon = torch.rand(batch_size,1)
+		epsilon = epsilon.expand_as(latent_u)
+		epsilon = epsilon.cuda()
 
-		# interpolation = epsilon*latent_u + (1 - epsilon)*latent_m
+		interpolation = epsilon*latent_u.data + (1 - epsilon)*latent_m.data
 
-		# interpolation = Variable(interpolation, requires_grad=True)
-		# interpolation = interpolation.cuda()
+		interpolation = Variable(interpolation, requires_grad=True)
+		interpolation = interpolation.cuda()
 
-		# interpolation_logits = disc(interpolation)
-		# grad_outputs = torch.ones(interpolation_logits.size())
-		# grad_outputs = grad_outputs.cuda()
+		interpolation_logits = disc(interpolation)
+		grad_outputs = torch.ones(interpolation_logits.size())
+		grad_outputs = grad_outputs.cuda()
 
-		# gradients = autograd.grad(outputs=interpolation_logits,
-		# 						  inputs=interpolation,
-		# 						  grad_outputs=grad_outputs,
-		# 						  create_graph=True,
-		# 						  retain_graph=True)[0]
+		gradients = autograd.grad(outputs=interpolation_logits,
+								  inputs=interpolation,
+								  grad_outputs=grad_outputs,
+								  create_graph=True,
+								  only_inputs=True,
+								  retain_graph=True)[0]
 
-		# gradients = gradients.view(batch_size, -1)
-		# gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
-		# grad_penalty = gamma * ((gradients_norm - 1) ** 2).mean()
+		gradients = gradients.view(batch_size, -1)
+		gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+		grad_penalty = gamma * ((gradients_norm - 1) ** 2).mean()
 
 		disc_out_u = disc(latent_u)
 		disc_out_m = disc(latent_m)
 
-		loss_disc = torch.mean(disc_out_m) - torch.mean(disc_out_u)# + grad_penalty
+		optim_dis.zero_grad()
+		loss_disc = torch.mean(disc_out_m) - torch.mean(disc_out_u) + grad_penalty
 		loss_disc.backward(retain_graph = True)
 		optim_dis.step()
 
-		#Clip weights of discriminator
-		for p in disc.parameters():
-			p.data.clamp_(-0.05, 0.05)
+		# # Clip weights of discriminator
+		# for p in disc.parameters():
+		# 	p.data.clamp_(-0.05, 0.05)
 
 
 		#Train generator every 5 iterations
@@ -185,10 +184,10 @@ for EPOCHS in range(No_Epoch):
 		disc_fake_out = disc(latent_m)
 		loss_adv = -torch.mean(disc_fake_out)
 		loss_recn = criterion_recn(recon_m, imgs_m)
-		# if(i % 3 == 0):
-		loss_gen = loss_adv*0.1 + loss_recn*0.9
-		# else:
-			# loss_gen = loss_recn
+		if(i % 5 == 0):
+			loss_gen = loss_adv*0.001 + loss_recn*0.999
+		else:
+			loss_gen = loss_recn
 
 		loss_gen.backward()
 		optim_gen.step()
@@ -199,6 +198,9 @@ for EPOCHS in range(No_Epoch):
 
 		disc_out_m = disc_out_m.cpu().detach().numpy()
 		disc_out_u = disc_out_u.cpu().detach().numpy()
+
+		print(disc_out_u[:5, 0])
+		print(disc_out_m[:5, 0])
 
 		disc_out_m = [1 if disc_out_m[i][0] >= 0.5 else 0 for i in range(disc_out_m.shape[0])]
 		disc_out_u = [1 if disc_out_u[i][0] >= 0.5 else 0 for i in range(disc_out_u.shape[0])]
@@ -216,24 +218,21 @@ for EPOCHS in range(No_Epoch):
 		if(i == 0):
 			save_img(imgs_m.cpu(), recon_m.cpu(), i)
 
-		i += 1
 		cosine_sim_train += angle_error
 
 		if(angle_error < best_val_loss):
 			torch.save(ae.state_dict(), save_dir + 'best_val_ae.wts')
 			torch.save(disc.state_dict(), save_dir + 'best_val_disc.wts')
-			best_val_loss = angle_error_test
+			best_val_loss = angle_error
 			print("Saved best loss weights")
-
-		if(i % 100 == 0):
-			torch.save(ae.state_dict(), save_dir + 'trained_ae.wts')
-			torch.save(disc.state_dict(), save_dir + 'trained_disc.wts')
 
 
 
 		# angle_error_test = 0
+
 		# if(i % 10 == 0):
 		# 	for (imgs, labels) in mpiloader_test:
+		# 		imgs, labels = imgs.to(device), labels.to(device)
 		# 		recon, gaze, latent = ae(imgs)
 		# 		angle_error_test += torch.acos(cos(gaze, labels)).mean()*180.0/3.1415
 
@@ -247,6 +246,8 @@ for EPOCHS in range(No_Epoch):
 		# 	torch.save(ae.state_dict(), save_dir + 'trained_ae.wts')
 		# 	torch.save(disc.state_dict(), save_dir + 'trained_disc.wts')
 
+
+		i += 1
 
 
 	cosine_sim_train /= len_loader

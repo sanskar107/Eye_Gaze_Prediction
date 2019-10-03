@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+# from torchsummary import summary
 
 class AutoEncoder(nn.Module):
 
@@ -8,65 +9,95 @@ class AutoEncoder(nn.Module):
 		super(AutoEncoder, self).__init__()
 		self.encoder = nn.Sequential(
 			nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
-			nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
-			nn.Conv2d(64, 64, kernel_size=3, stride=(1, 2), padding=1, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(64),
+			nn.ReLU(inplace=True),
 
-			nn.MaxPool2d(kernel_size=2, stride=2),
+			nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=True),
+			nn.BatchNorm2d(64),
+			nn.ReLU(inplace=True),
+
+			nn.Conv2d(64, 64, kernel_size=3, stride=(1, 2), padding=1, bias=True),
+			nn.BatchNorm2d(64),
+			nn.ReLU(inplace=True),
+
+			nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=(0, 1), bias=True),
+			# nn.MaxPool2d(kernel_size=2, stride=2),
 			
 			nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=(0, 1), bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
-			nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
-			nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(128),
+			nn.ReLU(inplace=True),
 
-			nn.MaxPool2d(kernel_size=2, stride=2),
+			nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1, bias=True),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
+
+			nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=True),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
+
+			nn.Conv2d(256, 256, kernel_size=3, stride=2, padding=(0, 1), bias=True),
+			# nn.MaxPool2d(kernel_size=2, stride=2),
+
 			nn.Conv2d(256, 512, kernel_size=3, stride=1, padding=1, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(512),
+			nn.ReLU(inplace=True),
 			# nn.MaxPool2d(kernel_size=2, stride=2),
 
 			nn.Conv2d(512, 1024, kernel_size=7, stride=1, padding=0, bias=True),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(1024),
 		   )
 			# deconv
 		self.decoder = nn.Sequential(
 
 			nn.ConvTranspose2d(1024, 512, (3, 5)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(512),
+			nn.ReLU(inplace=True),
 
 			nn.ConvTranspose2d(512, 256, (3, 5)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(256),
+			nn.ReLU(inplace=True),
 
 			nn.ConvTranspose2d(256, 128, (3, 5)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(128),
+			nn.ReLU(inplace=True),
+
 			nn.ConvTranspose2d(128, 64, (3, 5)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(64),
+			nn.ReLU(inplace=True),
 
 			nn.ConvTranspose2d(64, 32, (5, 9)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(32),
+			nn.ReLU(inplace=True),
 
 			nn.ConvTranspose2d(32, 16, (5, 9)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(16),
+			nn.ReLU(inplace=True),
+
 			nn.ConvTranspose2d(16, 8, (7, 9)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(8),
+			nn.ReLU(inplace=True),
 
 			nn.ConvTranspose2d(8, 4, (7, 9)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(4),
+			nn.ReLU(inplace=True),
+
 			nn.ConvTranspose2d(4, 2, (7, 7)),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.BatchNorm2d(2),
+			nn.ReLU(inplace=True),
 
 			nn.ConvTranspose2d(2, 1, 1),
-			nn.LeakyReLU(0.2, inplace=True),
+			nn.Tanh()
 		)
 
 		self.gaze = nn.Sequential(
 			nn.Linear(1024, 256),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.BatchNorm1d(256),
+			nn.ReLU(inplace=True),
+
 			nn.Linear(256, 64),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.BatchNorm1d(64),
+			nn.ReLU(inplace=True),
+			
 			nn.Linear(64, 3),
 			)
 
@@ -82,10 +113,22 @@ class Discriminator(nn.Module):
 	def __init__(self):
 		super(Discriminator, self).__init__()
 		self.disc = nn.Sequential(
-			nn.Linear(1024, 256),
-			nn.LeakyReLU(0.1, inplace=True),
-			nn.Linear(256, 64),
-			nn.LeakyReLU(0.1, inplace=True),
+			nn.Linear(1024, 512),
+			nn.BatchNorm1d(512),
+			nn.LeakyReLU(0.2, inplace=True),
+
+			nn.Linear(512, 256),
+			nn.BatchNorm1d(256),
+			nn.LeakyReLU(0.2, inplace=True),
+
+			nn.Linear(256, 128),
+			nn.BatchNorm1d(128),
+			nn.LeakyReLU(0.2, inplace=True),
+
+			nn.Linear(128, 64),
+			nn.BatchNorm1d(64),
+			nn.LeakyReLU(0.2, inplace=True),
+
 			nn.Linear(64, 1),
 			nn.Sigmoid(),
 			)
@@ -96,10 +139,22 @@ class Discriminator_wgan(nn.Module):
 	def __init__(self):
 		super(Discriminator_wgan, self).__init__()
 		self.disc = nn.Sequential(
-			nn.Linear(1024, 256),
+			nn.Linear(1024, 512),
+			nn.BatchNorm1d(512),
 			nn.LeakyReLU(0.2, inplace=True),
-			nn.Linear(256, 64),
+
+			nn.Linear(512, 256),
+			nn.BatchNorm1d(256),
 			nn.LeakyReLU(0.2, inplace=True),
+
+			nn.Linear(256, 128),
+			nn.BatchNorm1d(128),
+			nn.LeakyReLU(0.2, inplace=True),
+
+			nn.Linear(128, 64),
+			nn.BatchNorm1d(64),
+			nn.LeakyReLU(0.2, inplace=True),
+
 			nn.Linear(64, 1),
 			)
 	def forward(self, x):
@@ -124,12 +179,26 @@ class CosineLoss(nn.Module):
 
 
 if __name__ == '__main__':
-	# ae = AutoEncoder()
-	# a = torch.randn(1, 1, 35, 55)
+	ae = AutoEncoder()
+	disc = Discriminator()
+	a = torch.randn(2, 1, 35, 55)
 	# for params in ae.gaze.parameters():
 	# 	params.requires_grad = False
 	# for params in ae.parameters():
 	# 	print(params)
-	dis = Discriminator()
-	a = torch.randn(1, 1024)
-	print(dis(a))
+	# dis = Discriminator()
+	# a = torch.randn(1, 1024)
+	# print(dis(a))
+	# ae = ae.to('cuda:0')
+	# disc = disc.to('cuda:0')
+	ae.train()
+	# print(a.shape)
+	# print(ae)
+	r, e, l = ae(a)
+	b = disc(l)
+	print(b)
+	# summary(ae, (1, 35, 55))
+	# summary(disc, (1024))
+	# print(r.shape)
+	# print(e.shape)
+	# print(l.shape)

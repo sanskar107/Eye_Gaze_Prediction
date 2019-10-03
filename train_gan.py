@@ -1,5 +1,5 @@
 import sys
-sys.path.append('~/BTP/')
+sys.path.append('~/eyegaze/')
 import torch
 import torch.nn as nn
 import numpy as np
@@ -34,7 +34,7 @@ img_stddev = 48.6903
 # img_mean = 0
 # img_stddev = 255
 
-batch_size = 1000
+batch_size = 512
 
 mpi_dataset = mpiloader('./data/', split="train")
 mpiloader = torch.utils.data.DataLoader(mpi_dataset, batch_size=batch_size, shuffle=True, num_workers=1, pin_memory=True)
@@ -98,7 +98,7 @@ if(resume_training):
 
 
 
-best_val_loss = 20
+best_val_loss = 20.0
 
 No_Epoch = 1000
 
@@ -107,8 +107,8 @@ len_loader = min(len(unityloader), len(mpiloader))
 print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len_loader))
 
 # optim_recn = torch.optim.Adam(filter(lambda p: p.requires_grad, ae.parameters()), lr=0.0001)
-optim_gen = torch.optim.RMSprop(filter(lambda p: p.requires_grad, ae.parameters()), lr=0.0001)
-optim_dis = torch.optim.RMSprop(disc.parameters(), lr=0.0001)
+optim_gen = torch.optim.RMSprop(filter(lambda p: p.requires_grad, ae.parameters()), lr=0.00001)
+optim_dis = torch.optim.RMSprop(disc.parameters(), lr=0.00001)
 
 criterion_recn = nn.L1Loss()
 criterion_adverserial = nn.BCELoss()
@@ -142,8 +142,10 @@ for EPOCHS in range(No_Epoch):
 		disc_fake_out = disc(latent_m)
 		loss_adv = criterion_adverserial(disc_fake_out, valid)
 		# loss_gen = loss_adv
-		loss_gen = loss_recn*0.99 + loss_adv*0.01
-
+		if(i % 1== 0):
+			loss_gen = loss_recn*0.99 + loss_adv*0.01
+		else:
+			loss_gen = loss_recn
 		optim_gen.zero_grad()
 		loss_gen.backward(retain_graph = True)
 		optim_gen.step()
@@ -164,6 +166,7 @@ for EPOCHS in range(No_Epoch):
 		optim_dis.zero_grad()
 		loss_disc.backward()
 		optim_dis.step()
+		optim_dis.zero_grad()
 
 		disc_out_m = disc_out_m.cpu().detach().numpy()
 		disc_out_u = disc_out_u.cpu().detach().numpy()
@@ -175,7 +178,7 @@ for EPOCHS in range(No_Epoch):
 		disc_fake_acc = 1 - np.mean(disc_out_m)
 
 		# if(i % 10 == 0):
-		print("epoch : {} iters : {} loss_recn : {:.3} loss_adv : {:.3} loss_disc : {:.3} angle_error : {:.3} disc_real_acc : {:.3} disc_fake_acc : {:.3} gen_accuracy : {:.3}".format(EPOCHS, i, loss_recn.item(), loss_adv.item(), loss_disc.item(), angle_error, disc_real_acc, disc_fake_acc, gen_accuracy))
+		print("epoch : {} iters : {} loss_recn : {:.3} loss_adv : {:.3} loss_disc : {:.3} angle_error : {:.3} disc_real_acc : {:.3} disc_fake_acc : {:.3} gen_accuracy : {:.3} best_error : {}".format(EPOCHS, i, loss_recn.item(), loss_adv.item(), loss_disc.item(), angle_error, disc_real_acc, disc_fake_acc, gen_accuracy, best_val_loss))
 		# log_value('angle_error', angle_error, int(EPOCHS*(len(mpiloader)) + i))
 		# log_value('loss_recn', loss_recn.item(), int(EPOCHS*(len(mpiloader)) + i))
 		# log_value('loss_adv', loss_adv.item(), int(EPOCHS*(len(mpiloader)) + i))
@@ -184,14 +187,26 @@ for EPOCHS in range(No_Epoch):
 			save_img(imgs_m.cpu(), recon_m.cpu(), i)
 		i += 1
 		cosine_sim_train += angle_error
+
+		if(angle_error < best_val_loss):
+			torch.save(ae.state_dict(), save_dir + 'best_val_ae.wts')
+			torch.save(disc.state_dict(), save_dir + 'best_val_disc.wts')
+			best_val_loss = angle_error
+			print("Saved best loss weights")
+
+		if(i % 100 == 0):
+			torch.save(ae.state_dict(), save_dir + 'trained_ae.wts')
+			torch.save(disc.state_dict(), save_dir + 'trained_disc.wts')
+			
+
 	cosine_sim_train /= len_loader
 
 	print("EPOCH : {} Cosine_Sim_Train : {:.3f} ".format(EPOCHS, cosine_sim_train))
 	
-	if cosine_sim_train < best_val_loss:
-		torch.save(ae.state_dict(), save_dir + 'best_val_ae.wts')
-		torch.save(disc.state_dict(), save_dir + 'best_val_disc.wts')
-		best_val_loss = cosine_sim_train
-		print("Saved best loss weights")
+	# if cosine_sim_train < best_val_loss:
+	# 	torch.save(ae.state_dict(), save_dir + 'best_val_ae.wts')
+	# 	torch.save(disc.state_dict(), save_dir + 'best_val_disc.wts')
+	# 	best_val_loss = cosine_sim_train
+	# 	print("Saved best loss weights")
 	torch.save(ae.state_dict(), save_dir + 'trained_ae.wts')
 	torch.save(disc.state_dict(), save_dir + 'trained_disc.wts')
