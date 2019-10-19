@@ -6,7 +6,7 @@ from torch import autograd
 import numpy as np
 from torchvision import datasets, models, transforms
 from data.data_loader import *
-from model import *
+from model_new import *
 import torchvision
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -50,16 +50,21 @@ unityloader = torch.utils.data.DataLoader(unity_dataset, batch_size=batch_size, 
 
 
 def save_img(imgs, recon, epoch):
-	imgs = imgs.detach().numpy()
-	recon = recon.detach().numpy()
-	imgs = imgs*img_stddev + img_mean
-	recon = recon*img_stddev + img_mean
+	imgs = imgs.cpu().detach().numpy()
+	recon = recon.cpu().detach().numpy()
+
+	# imgs = imgs*img_stddev + img_mean
+	# recon = recon*img_stddev + img_mean
+
+	imgs = (imgs + 1.0)*255.0/2.0
+	recon = (recon + 1.0)*255.0/2.0
+
 	imgs = imgs.squeeze(1)
 	recon = recon.squeeze(1)
-	imgs = np.array(imgs, dtype = np.uint8)
-	recon = np.array(recon, dtype = np.uint8)
 	recon[recon < 0] = 0
 	recon[recon > 255] = 255
+	imgs = np.array(imgs, dtype = np.uint8)
+	recon = np.array(recon, dtype = np.uint8)
 	for i in range(imgs.shape[0]):
 		if(i == 10):
 			break
@@ -67,25 +72,21 @@ def save_img(imgs, recon, epoch):
 		cv2.imwrite('output/' + str(i) + 'recon.png', recon[i])
 
 
-
 cos = nn.CosineSimilarity(dim = 1)
 
 def update_lr(optimizer, epoch):
-	if epoch == 10:
+	if (epoch + 1) % 3 == 0:
+		lr = 0
 		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-		print("LR Reduced")
-
-	if epoch == 20:
-		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-		print("LR Reduced")
+			param_group['lr'] *= 0.85
+			lr = param_group['lr']
+		print("LR Reduced to {}".format(lr))
 
 
 #Load unity weights
-ae_unity.load_state_dict(torch.load('weights/unity_new/best_val.wts'))
-ae.load_state_dict(torch.load('weights/mpi/best_val.wts'))
-disc.load_state_dict(torch.load('weights/gan/disc_only.wts'))
+ae_unity.load_state_dict(torch.load('weights/unity/best_val.wts'))
+ae.load_state_dict(torch.load('weights/unity/best_val.wts'))
+# disc.load_state_dict(torch.load('weights/gan/disc_only.wts'))
 print("Unity and MPI Weights Loaded")
 
 #Freezing fc layers
@@ -103,7 +104,7 @@ if(resume_training):
 	print("weights Loaded")
 
 
-best_val_loss = 9
+best_val_loss = 11
 
 No_Epoch = 1000
 
@@ -140,43 +141,43 @@ for EPOCHS in range(No_Epoch):
 		recon_m, gaze_m, latent_m = ae(imgs_m)
 
 		#Train Discriminator
-		optim_dis.zero_grad()
+		# optim_dis.zero_grad()
 
-		epsilon = torch.rand(batch_size,1)
-		epsilon = epsilon.expand_as(latent_u)
-		epsilon = epsilon.cuda()
+		# epsilon = torch.rand(batch_size,1)
+		# epsilon = epsilon.expand_as(latent_u)
+		# epsilon = epsilon.cuda()
 
-		interpolation = epsilon*latent_u.data + (1 - epsilon)*latent_m.data
+		# interpolation = epsilon*latent_u.data + (1 - epsilon)*latent_m.data
 
-		interpolation = Variable(interpolation, requires_grad=True)
-		interpolation = interpolation.cuda()
+		# interpolation = Variable(interpolation, requires_grad=True)
+		# interpolation = interpolation.cuda()
 
-		interpolation_logits = disc(interpolation)
-		grad_outputs = torch.ones(interpolation_logits.size())
-		grad_outputs = grad_outputs.cuda()
+		# interpolation_logits = disc(interpolation)
+		# grad_outputs = torch.ones(interpolation_logits.size())
+		# grad_outputs = grad_outputs.cuda()
 
-		gradients = autograd.grad(outputs=interpolation_logits,
-								  inputs=interpolation,
-								  grad_outputs=grad_outputs,
-								  create_graph=True,
-								  only_inputs=True,
-								  retain_graph=True)[0]
+		# gradients = autograd.grad(outputs=interpolation_logits,
+		# 						  inputs=interpolation,
+		# 						  grad_outputs=grad_outputs,
+		# 						  create_graph=True,
+		# 						  only_inputs=True,
+		# 						  retain_graph=True)[0]
 
-		gradients = gradients.view(batch_size, -1)
-		gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
-		grad_penalty = gamma * ((gradients_norm - 1) ** 2).mean()
+		# gradients = gradients.view(batch_size, -1)
+		# gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
+		# grad_penalty = gamma * ((gradients_norm - 1) ** 2).mean()
 
 		disc_out_u = disc(latent_u)
 		disc_out_m = disc(latent_m)
 
 		optim_dis.zero_grad()
-		loss_disc = torch.mean(disc_out_m) - torch.mean(disc_out_u) + grad_penalty
+		loss_disc = torch.mean(disc_out_m) - torch.mean(disc_out_u)# + grad_penalty
 		loss_disc.backward(retain_graph = True)
 		optim_dis.step()
 
-		# # Clip weights of discriminator
-		# for p in disc.parameters():
-		# 	p.data.clamp_(-0.05, 0.05)
+		# Clip weights of discriminator
+		for p in disc.parameters():
+			p.data.clamp_(-0.1, 0.1)
 
 
 		#Train generator every 5 iterations
@@ -184,8 +185,8 @@ for EPOCHS in range(No_Epoch):
 		disc_fake_out = disc(latent_m)
 		loss_adv = -torch.mean(disc_fake_out)
 		loss_recn = criterion_recn(recon_m, imgs_m)
-		if(i % 5 == 0):
-			loss_gen = loss_adv*0.001 + loss_recn*0.999
+		if(i % 2 == 0):
+			loss_gen = loss_adv*0.01 + loss_recn*0.99
 		else:
 			loss_gen = loss_recn
 
@@ -193,17 +194,17 @@ for EPOCHS in range(No_Epoch):
 		optim_gen.step()
 
 		disc_fake_out = disc_fake_out.cpu().detach().numpy()
-		disc_fake_out = [1 if disc_fake_out[i][0] >= 0.5 else 0 for i in range(disc_fake_out.shape[0])]
+		disc_fake_out = [1 if disc_fake_out[i][0] >= 0 else 0 for i in range(disc_fake_out.shape[0])]
 		gen_accuracy = np.mean(disc_fake_out)
 
 		disc_out_m = disc_out_m.cpu().detach().numpy()
 		disc_out_u = disc_out_u.cpu().detach().numpy()
 
-		print(disc_out_u[:5, 0])
-		print(disc_out_m[:5, 0])
+		# print(disc_out_u[:5, 0])
+		# print(disc_out_m[:5, 0])
 
-		disc_out_m = [1 if disc_out_m[i][0] >= 0.5 else 0 for i in range(disc_out_m.shape[0])]
-		disc_out_u = [1 if disc_out_u[i][0] >= 0.5 else 0 for i in range(disc_out_u.shape[0])]
+		disc_out_m = [1 if disc_out_m[i][0] >= 0 else 0 for i in range(disc_out_m.shape[0])]
+		disc_out_u = [1 if disc_out_u[i][0] >= 0 else 0 for i in range(disc_out_u.shape[0])]
 
 		disc_real_acc = np.mean(disc_out_u)
 		disc_fake_acc = 1 - np.mean(disc_out_m)

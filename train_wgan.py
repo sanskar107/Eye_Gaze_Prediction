@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 from torchvision import datasets, models, transforms
 from data.data_loader import *
-from model import *
+from model_new import *
 import torchvision
 import torch.nn.functional as F
 from torch.autograd import Variable
@@ -43,16 +43,21 @@ unity_dataset = unityloader('./data/all/', split = "train")
 unityloader = torch.utils.data.DataLoader(unity_dataset, batch_size=batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
 def save_img(imgs, recon, epoch):
-	imgs = imgs.detach().numpy()
-	recon = recon.detach().numpy()
-	imgs = imgs*img_stddev + img_mean
-	recon = recon*img_stddev + img_mean
+	imgs = imgs.cpu().detach().numpy()
+	recon = recon.cpu().detach().numpy()
+
+	# imgs = imgs*img_stddev + img_mean
+	# recon = recon*img_stddev + img_mean
+
+	imgs = (imgs + 1.0)*255.0/2.0
+	recon = (recon + 1.0)*255.0/2.0
+
 	imgs = imgs.squeeze(1)
 	recon = recon.squeeze(1)
-	imgs = np.array(imgs, dtype = np.uint8)
-	recon = np.array(recon, dtype = np.uint8)
 	recon[recon < 0] = 0
 	recon[recon > 255] = 255
+	imgs = np.array(imgs, dtype = np.uint8)
+	recon = np.array(recon, dtype = np.uint8)
 	for i in range(imgs.shape[0]):
 		if(i == 10):
 			break
@@ -64,15 +69,12 @@ def save_img(imgs, recon, epoch):
 cos = nn.CosineSimilarity(dim = 1)
 
 def update_lr(optimizer, epoch):
-	if epoch == 10:
+	if (epoch + 1) % 3 == 0:
+		lr = 0
 		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-		print("LR Reduced")
-
-	if epoch == 20:
-		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-		print("LR Reduced")
+			param_group['lr'] *= 0.85
+			lr = param_group['lr']
+		print("LR Reduced to {}".format(lr))
 
 
 #Load unity weights
@@ -84,7 +86,7 @@ print("Unity Weights Loaded")
 for params in ae.gaze.parameters():
 	params.requires_grad = False
 
-resume_training = True
+resume_training = False
 save_dir = 'weights/wgan/'
 
 configure(save_dir)
