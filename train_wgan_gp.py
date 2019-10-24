@@ -85,8 +85,10 @@ def update_lr(optimizer, epoch):
 
 #Load unity weights
 ae_unity.load_state_dict(torch.load('weights/unity/best_val.wts'))
-ae.load_state_dict(torch.load('weights/unity/best_val.wts'))
+# ae.load_state_dict(torch.load('weights/unity/best_val.wts'))
 # disc.load_state_dict(torch.load('weights/gan/disc_only.wts'))
+# torch.save(ae.gaze.state_dict(), 'weights/unity/gaze_only.wts')
+ae.gaze.load_state_dict(torch.load('weights/unity/gaze_only.wts'))
 print("Unity and MPI Weights Loaded")
 
 #Freezing fc layers
@@ -104,7 +106,7 @@ if(resume_training):
 	print("weights Loaded")
 
 
-best_val_loss = 11
+best_val_loss = 20
 
 No_Epoch = 1000
 

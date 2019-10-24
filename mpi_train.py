@@ -1,18 +1,18 @@
 import sys
-sys.path.append('/home/sanskar/Workspace/BTP/')
+sys.path.append('~/eyegaze/')
 import torch
 import torch.nn as nn
 import numpy as np
 from torchvision import datasets, models, transforms
 from data.data_loader import *
-from model import *
+from model_new import *
 import torchvision
 import torch.nn.functional as F
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import math
 import cv2
-from tensorboard_logger import configure, log_value
+#from tensorboard_logger import configure, log_value
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -34,14 +34,16 @@ img_stddev = 48.6903
 params = net.state_dict()
 
 train_dataset = mpiloader('./data/', split="train")
-trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=100, shuffle=True, num_workers=1, pin_memory=True)
+trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=512, shuffle=True, num_workers=1, pin_memory=True)
 
 
 def save_img(imgs, recon, epoch):
 	imgs = imgs.detach().numpy()
 	recon = recon.detach().numpy()
-	imgs = imgs*img_stddev + img_mean
-	recon = recon*img_stddev + img_mean
+	# imgs = imgs*img_stddev + img_mean
+	# recon = recon*img_stddev + img_mean
+	imgs = (imgs + 1.0)*255.0/2.0
+	recon = (recon + 1.0)*255.0/2.0 
 	imgs = imgs.squeeze(1)
 	recon = recon.squeeze(1)
 	imgs = np.array(imgs, dtype = np.uint8)
@@ -60,30 +62,31 @@ loss_fn = nn.MSELoss()
 cos = nn.CosineSimilarity(dim = 1)
 
 def update_lr(optimizer, epoch):
-	if epoch == 10:
+	if (epoch + 1) % 3 == 0:
+		lr = 0
 		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-		print("LR Reduced")
+			param_group['lr'] *= 0.85
+			lr = param_group['lr']
+		print("LR Reduced to {}".format(lr))
 
-	if epoch == 20:
-		for param_group in optimizer.param_groups:
-			param_group['lr'] *= 0.1
-		print("LR Reduced")
-
-resume_training = True
+resume_training = False
 freeze_fc = True
 save_dir = 'weights/mpi/'
-configure(save_dir)
+#configure(save_dir)
+
+# net.load_state_dict(torch.load('weights/unity/best_val.wts'))
+net.gaze.load_state_dict(torch.load('weights/unity/gaze_only.wts'))
+print("Unity Weights Loaded")
 
 if(resume_training):
-	net.load_state_dict(torch.load('weights/unity/best_val.wts'))
+	net.load_state_dict(torch.load('weights/mpi/best_val.wts'))
 	print("weights Loaded")
 
 if(freeze_fc):
 	for params in net.gaze.parameters():
 		params.requires_grad = False
 
-best_val_loss = 1
+best_val_loss = 20
 
 No_Epoch = 1000
 print("Total Epochs : {} Iterations per Epoch : {}".format(No_Epoch, len(trainloader)))
@@ -101,7 +104,7 @@ for EPOCHS in range(No_Epoch):
 	for i, data in enumerate(trainloader):
 		imgs, labels = data
 		imgs, labels = imgs.to(device), labels.to(device)
-		recon, gaze = net(imgs)
+		recon, gaze, lat = net(imgs)
 
 		loss_recon = loss_fn(recon, imgs)
 		loss_gaze = loss_fn(gaze, labels)
@@ -109,10 +112,10 @@ for EPOCHS in range(No_Epoch):
 		angle_error = torch.acos(cos(gaze, labels)).mean()*180.0/3.1415
 		if(i % 10 == 0):
 			print("epoch : {} iters : {} gaze : {:.3} recon : {:.3} angle_error : {:.3}".format(EPOCHS, i, loss_gaze.item(), loss_recon.item(), angle_error))
-			log_value('angle_error', angle_error, int(EPOCHS*(len(trainloader)/10) + i/10))
-			log_value('loss_gaze', loss_gaze.item(), int(EPOCHS*(len(trainloader)/10) + i/10))
-			log_value('loss_recon', loss_recon.item(), int(EPOCHS*(len(trainloader)/10) + i/10))
-		if(i == 0):
+		#	log_value('angle_error', angle_error, int(EPOCHS*(len(trainloader)/10) + i/10))
+		#	log_value('loss_gaze', loss_gaze.item(), int(EPOCHS*(len(trainloader)/10) + i/10))
+		#	log_value('loss_recon', loss_recon.item(), int(EPOCHS*(len(trainloader)/10) + i/10))
+		if(i == 1):
 			save_img(imgs.cpu(), recon.cpu(), i)
 
 
@@ -127,7 +130,7 @@ for EPOCHS in range(No_Epoch):
 	print("EPOCH : {} Recon_Loss : {:.3f} Cosine_Sim_Train : {:.3f} ".format(EPOCHS, train_loss, cosine_sim_train))
 	
 	if train_loss < best_val_loss:
-		torch.save(net.state_dict(), save_dir + 'best_val_mpi.wts')
+		torch.save(net.state_dict(), save_dir + 'best_val.wts')
 		best_val_loss = train_loss
 		print("Saved best loss weights")
 	torch.save(net.state_dict(), save_dir + 'trained_mpi.wts')
